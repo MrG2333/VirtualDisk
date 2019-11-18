@@ -106,6 +106,7 @@ MyFILE * myfopen(  const char * filename, const char * mode) ;
 void myfputc(int b, MyFILE * stream) ;
 void myfclose(MyFILE * stream) ;
 int myfgetc(MyFILE * stream) ;
+int retUnusedSector();
 #endif
 
 /*

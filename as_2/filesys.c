@@ -27,10 +27,32 @@ fatentry_t   currentDirIndex         = 0 ;
   * Write the file descriptor and return a pointer to where in memory it is.
   */
 
+int retUnusedSector()
+{
+    int i=0;
+    while(FAT[i]!=UNUSED) i++;
+    return i;
+}
+
+
 void myfputc(int b, MyFILE * stream)
 {
+    int unused_sector;
     if( strcmp(stream->mode,"w") == 0)
     {
+
+    unused_sector = retUnusedSector();
+
+    if(stream->pos + 1 == BLOCKSIZE)
+    {
+
+        FAT[stream->blockno] = unused_sector;
+        FAT[unused_sector] = ENDOFCHAIN;
+        stream->blockno = unused_sector;
+        stream->pos = 0;
+    }
+
+
     stream->buffer.data[stream->pos] = b;
     stream->pos++;
     }
@@ -40,10 +62,20 @@ void myfputc(int b, MyFILE * stream)
 
 int myfgetc(MyFILE * stream)
 {
+    if(stream->pos == BLOCKSIZE-1)          ///1023
+    {
+        stream->blockno = FAT[stream->blockno];
+        stream->pos = 0;
+    }
+
     if(virtualDisk[stream->blockno].data[stream->pos] == EOF)
         return EOF;
     else
+    {
+        stream->pos++;
         return virtualDisk[stream->blockno].data[stream->pos];
+    }
+
 }
 
 void myfclose(MyFILE * stream)
@@ -87,9 +119,8 @@ MyFILE * myfopen( const char * filename, const char * mode )
 
         strcpy(file->mode,mode);
 
-        int i=0;
-        while(FAT[i]!=UNUSED) i++;
-        file->blockno = i;       /// position in memory
+
+        file->blockno = retUnusedSector();       /// position in memory
 
         file->pos = 0;
         strcpy(file->buffer.data + file->pos,filename);
