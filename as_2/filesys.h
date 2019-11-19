@@ -48,8 +48,8 @@ typedef fatentry_t fatblock_t [ FATENTRYCOUNT ] ;
 
 typedef struct direntry {
    int         entrylength ;   // records length of this entry (can be used with names of variables length)
-   Byte        isdir ;
-   Byte        unused ;
+   Byte        isdir ;          // 0 for false
+   Byte        unused ;         //1 for used
    time_t      modtime ;
    int         filelength ;
    fatentry_t  firstblock ;
@@ -95,7 +95,7 @@ typedef struct filedescriptor {
    char        mode[3] ;
    fatentry_t  blockno ;           // block no
    int         pos     ;           // byte within a block
-   char        file_name[100];
+   char   name [MAXNAME] ;
    diskblock_t buffer  ;
 } MyFILE ;
 
@@ -108,6 +108,7 @@ void myfputc(int b, MyFILE * stream) ;
 void myfclose(MyFILE * stream) ;
 int myfgetc(MyFILE * stream) ;
 int retUnusedSector();
+int file_location(const char * filename);
 #endif
 
 /*

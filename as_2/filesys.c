@@ -15,7 +15,7 @@ fatentry_t   FAT         [MAXBLOCKS] ;           // define a file allocation tab
 fatentry_t   rootDirIndex            = 0 ;       // rootDir will be set by format
 direntry_t * currentDir              = NULL ;
 fatentry_t   currentDirIndex         = 0 ;
-
+int number_dir_entries = 1;
  /*
   *
   * File management functions
@@ -37,65 +37,116 @@ int retUnusedSector()
 
 void myfputc(int b, MyFILE * stream)
 {
-    int unused_sector;
+
+    short int unused_sector;
+    int f_loc = file_location(stream->name);
+
+    virtualDisk[rootDirIndex].dir.entrylist[f_loc].filelength++;
+    virtualDisk[rootDirIndex].dir.entrylist[f_loc].modtime = time(0);
+
+
     if( strcmp(stream->mode,"w") == 0)
     {
-
     unused_sector = retUnusedSector();
 
-    if(stream->pos + 2 == BLOCKSIZE)    ///leave space for EOL and a EOF
+    if(stream->pos == BLOCKSIZE)    ///leave space for EOL and a EOF
     {
 
         FAT[stream->blockno] = unused_sector;
         FAT[unused_sector] = ENDOFCHAIN;
+
         stream->blockno = unused_sector;
         stream->pos = 0;
+        copyFAT();
+        for(int i=0;i<BLOCKSIZE;i++) stream->buffer.data[i]='\0';
+
     }
 
 
     stream->buffer.data[stream->pos] = b;
     stream->pos++;
+
     }
     writeblock(&stream->buffer.data, stream->blockno);
-
 }
 
 int myfgetc(MyFILE * stream)
 {
-    if(stream->pos == BLOCKSIZE-1)          ///1023
+    int f_loc = file_location(stream->name);
+
+    int f_length = virtualDisk[rootDirIndex].dir.entrylist[f_loc].filelength;
+    fatentry_t bln= stream->blockno - virtualDisk[rootDirIndex].dir.entrylist[f_loc].firstblock;
+    int c_to_return;
+
+    if(stream->pos == BLOCKSIZE)
     {
         stream->blockno = FAT[stream->blockno];
         stream->pos = 0;
     }
 
-    if(virtualDisk[stream->blockno].data[stream->pos] == EOF)
-        return EOF;
+    if(stream->pos + (bln*BLOCKSIZE) < f_length)
+        {
+            c_to_return =virtualDisk[stream->blockno].data[stream->pos];
+            stream->pos++;
+            return c_to_return;
+        }
     else
-    {
-        return virtualDisk[stream->blockno].data[stream->pos];
-        stream->pos++;
-    }
-
+        return -1;
 }
 
 void myfclose(MyFILE * stream)
 {
+    ///if there is no space for EOF go to the next block and place EOF
+    short int unused_sector;
+    if(stream->pos == BLOCKSIZE)
+    {
+        unused_sector = retUnusedSector();
+        FAT[stream->blockno] = unused_sector;
+        FAT[unused_sector] = ENDOFCHAIN;
 
+        stream->blockno = unused_sector;
+        stream->pos = 0;
+        copyFAT();
+        for(int i=0;i<BLOCKSIZE;i++) stream->buffer.data[i]='\0';
+    }
 
-    printf("\n\nclose stream-> pos: %d\n\n", stream->pos);
-    for(int j = BLOCKSIZE-1; j>=0;j--)
+    for(int j = BLOCKSIZE; j>=0;j--)
         if(stream->buffer.data[j] == 255)
             break;
         else
-        if(stream->buffer.data[j] != 0)
+        {
+            if(stream->buffer.data[j] != 0)
             {
-                printf("DIfferent: %d", stream->buffer.data[j] );
-                stream->buffer.data[j+2] = -1;
+                stream->buffer.data[j+1] = -1;
                 break;
             }
+            if(j == 0)
+            {
+                stream->buffer.data[j] = -1;
+            }
+        }
+
     writeblock(&stream->buffer.data,stream->blockno); ///ASSUME ENOUGH SPACE EXISTS
     free(stream);
 }
+
+
+int file_location(const char * filename)
+{
+diskblock_t search_block;
+search_block.dir = virtualDisk[rootDirIndex].dir;
+
+for(int i =0; i < number_dir_entries;i++)
+   {
+    if( strcmp(search_block.dir.entrylist[i].name, filename) ==0)
+        {
+        return i;
+        }
+   }
+return -1;
+
+}
+
 
 
 MyFILE * myfopen( const char * filename, const char * mode )
@@ -103,46 +154,51 @@ MyFILE * myfopen( const char * filename, const char * mode )
     MyFILE * file;
     file = malloc( sizeof(MyFILE) ) ;
     int fblocks = (MAXBLOCKS / FATENTRYCOUNT );
-    int file_exists = 0;
-    if(strcmp(mode,"r") == 0){
 
+    int f_loc = file_location(filename);
 
-        for(int i = 4; i < MAXBLOCKS; i++)
-        {
-            if(strcmp(virtualDisk[i].data, filename) == 0)
-            {
-                file_exists = 1;
-                file->blockno = i;
-                strcpy(file->file_name, filename);
-                memcpy(file->buffer.data, virtualDisk[i].data,BLOCKSIZE-1);
-                file->pos = strlen(filename)+1;
-                break;
-            }
+    if( f_loc == -1 && strcmp(mode,"w")==0)
+    {
+        ///File does not exist create it
+        short int place_in_fat;
+        place_in_fat = retUnusedSector();
+        FAT[place_in_fat] = ENDOFCHAIN;
+        currentDirIndex++;
 
-        }
+        direntry_t entry_for_file;
+        entry_for_file.filelength = 1;      ///EOF at the end
+        entry_for_file.isdir = 0;
+        strcpy(entry_for_file.name,filename);
+        entry_for_file.unused = 1;
+        entry_for_file.firstblock = place_in_fat;
+        entry_for_file.modtime = time(0);
 
-        if(file_exists == 0)
-            return NULL;
-    }
-    else if(strcmp(mode,"a") == 0 ){
-    } else{
-        //alocate memory for a file with malloc
+        diskblock_t writedirentry;
+
+        writedirentry.dir.entrylist[writedirentry.dir.nextEntry] = entry_for_file;
+        writedirentry.dir.nextEntry++;
+
+        writeblock(&writedirentry,rootDirIndex);
 
         strcpy(file->mode,mode);
-
-
-        file->blockno = retUnusedSector();       /// position in memory
-
         file->pos = 0;
-        strcpy(file->buffer.data + file->pos,filename);
+        file->blockno = place_in_fat;
+        strcpy(file->name,filename);
 
-        file->pos = strlen(filename)+1;
-        strcpy(file->file_name, filename);
+        number_dir_entries++;
+    }
+    else if (f_loc != -1 && strcmp(mode,"r") == 0 ){
 
-        FAT[file->blockno] = ENDOFCHAIN;
-        copyFAT();
-        writeblock(&file->buffer.data, file->blockno);
-        }
+        strcpy(file->mode,mode);
+        file->pos = 0;
+        file->blockno = virtualDisk[rootDirIndex].dir.entrylist[f_loc].firstblock;
+        strcpy(file->name,filename);
+        return file;
+    }
+
+
+
+
 
     return(file);
 }
@@ -157,7 +213,7 @@ MyFILE * myfopen( const char * filename, const char * mode )
 
 void writedisk ( const char * filename )
 {
-   printf ( "writedisk> virtualdisk[0] = %s\n", virtualDisk[0].data ) ;
+   //printf ( "writedisk> virtualdisk[0] = %s\n", virtualDisk[0].data ) ;
    FILE * dest = fopen( filename, "w" ) ;
    if ( fwrite ( virtualDisk, sizeof(virtualDisk), 1, dest ) < 0 )
       fprintf ( stderr, "write virtual disk to disk failed\n" ) ;
@@ -256,8 +312,14 @@ void format ( )
 
     for(int i = 0; i<=BLOCKSIZE; i++) block.data[i] = '\0';
 
+    rootDir.isdir = 1;
+    strcpy(rootDir.name,"/");
+    rootDir.firstblock = FAT[3];
+    rootDirIndex = 3;
+    currentDir = &rootDir;
+
     block.dir.isdir = 1;
-    block.dir.nextEntry = ENDOFCHAIN;
+    block.dir.nextEntry = 0;
 
     writeblock(&block,3);
     FAT[3] = ENDOFCHAIN;
