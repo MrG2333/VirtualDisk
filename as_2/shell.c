@@ -26,6 +26,7 @@ int main()
 
 
 
+
     writedisk("virtualdiskB3_B1");
 
 return 0;

@@ -109,6 +109,7 @@ void myfputc(int b, MyFILE * stream) ;
 void myfclose(MyFILE * stream) ;
 int myfgetc(MyFILE * stream) ;
 int retUnusedSector();
+void copyFAT();
 dirblock_t file_location(const char * filename);
 int file_in_directory(dirblock_t,const char * filename);
 void mymkdir( char *path);

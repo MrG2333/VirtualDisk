@@ -89,8 +89,8 @@ int myfgetc(MyFILE * stream)
             stream->pos++;
             if(c_to_return == 255)
                 return -1;
-            return c_to_return;
         }
+return c_to_return;
 }
 
 void myfclose(MyFILE * stream)
@@ -192,7 +192,7 @@ MyFILE * myfopen( const char * filename, const char * mode )
         entry_for_file.filelength = 1;      ///EOF at the end
         entry_for_file.isdir = 0;
 
-        char * name_from_path;
+
         int pos_last_slash;
 
         for(int i = 0;i<strlen(filename); i++){
@@ -308,9 +308,8 @@ void format ( )
 {
    diskblock_t block ;
    direntry_t  rootDir ;                // Create a root directory
-   int         pos             = 0 ;
-   int         fatentry        = 0 ;
-   int         fatblocksneeded =  (MAXBLOCKS / FATENTRYCOUNT ) ;
+
+   int    fatblocksneeded =  (MAXBLOCKS / FATENTRYCOUNT ) ;
    /* prepare block 0 : fill it with '\0',
     * use strcpy() to copy some text to it for test purposes
 	* write block 0 to virtual disk
@@ -344,13 +343,14 @@ void format ( )
     strcpy(rootDir.name,"/");
     rootDir.firstblock = FAT[3];
     rootDirIndex = 3;
-    currentDir = &rootDir;
+
 
     block.dir.isdir = 1;
     block.dir.nextEntry = 0;
 
     writeblock(&block,3);
     FAT[3] = ENDOFCHAIN;
+    currentDir = &virtualDisk[3].dir;
     copyFAT();
     rootDirIndex = 3;
 
