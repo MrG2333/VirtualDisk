@@ -21,7 +21,7 @@
 #define BLOCKSIZE     1024
 #define FATENTRYCOUNT (BLOCKSIZE / sizeof(fatentry_t))
 
-#define DIRENTRYCOUNT ((BLOCKSIZE - (2*sizeof(int)) ) / sizeof(direntry_t))
+#define DIRENTRYCOUNT ((BLOCKSIZE - (3*sizeof(int)) ) / sizeof(direntry_t))
 #define MAXNAME       256
 #define MAXPATHLENGTH 1024
 
@@ -59,11 +59,12 @@ typedef struct direntry {
 
 // a directory block is an array of directory entries
 
-//const int   direntrycount = (blocksize - (2*sizeof(int)) ) / sizeof(direntry_t) ;
+//const int   direntrycount = (blocksize - (3*sizeof(int)) ) / sizeof(direntry_t) ;
 
 typedef struct dirblock {
    int isdir ;
    int nextEntry ;
+   int start ;
    direntry_t entrylist [ DIRENTRYCOUNT ] ; // the first two integer are marker and endpos
 } dirblock_t ;
 
@@ -95,6 +96,7 @@ extern diskblock_t virtualDisk [ MAXBLOCKS ] ;
 typedef struct filedescriptor {
    char        mode[3] ;
    fatentry_t  blockno ;           // block no
+   fatentry_t  dir_start;
    int         pos     ;           // byte within a block
    char   name [MAXNAME] ;
    diskblock_t buffer  ;
@@ -109,11 +111,11 @@ void myfputc(int b, MyFILE * stream) ;
 void myfclose(MyFILE * stream) ;
 int myfgetc(MyFILE * stream) ;
 int retUnusedSector();
-void copyFAT();
 dirblock_t file_location(const char * filename);
 int file_in_directory(dirblock_t,const char * filename);
 void mymkdir( char *path);
 char ** mylistdir(char * path);
+dirblock_t expandDirectory(dirblock_t dir_to_expand);
 
 #endif
 

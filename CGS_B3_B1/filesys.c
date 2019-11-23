@@ -424,7 +424,6 @@ void mymkdir(char * path)
     char* rest = path_tokenize;
 
     while ((path_dir = strtok_r(rest, "/", &rest))){
-
         unusedSector = retUnusedSector();
 
         FAT[unusedSector]=ENDOFCHAIN;

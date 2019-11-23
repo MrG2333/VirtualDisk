@@ -15,7 +15,7 @@ fatentry_t   FAT         [MAXBLOCKS] ;           // define a file allocation tab
 fatentry_t   rootDirIndex            = 0 ;       // rootDir will be set by format
 direntry_t * currentDir              = NULL ;
 fatentry_t   currentDirIndex         = 0 ;
-int number_dir_entries = 1;
+
  /*
   *
   * File management functions
@@ -36,12 +36,15 @@ int retUnusedSector()
 
 void myfputc(int b, MyFILE * stream)
 {
+    printf("> myfputc start\n");
 
     short int unused_sector;
-    int f_loc = file_in_directory(virtualDisk[rootDirIndex].dir, stream->name);
 
-    virtualDisk[currentDirIndex].dir.entrylist[f_loc].filelength++;
-    virtualDisk[currentDirIndex].dir.entrylist[f_loc].modtime = time(0);
+    int f_loc = file_in_directory(virtualDisk[stream->dir_start].dir,stream->name);
+
+
+    virtualDisk[stream->dir_start].dir.entrylist[f_loc].filelength++;
+    virtualDisk[stream->dir_start].dir.entrylist[f_loc].modtime = time(0);
 
 
     if( strcmp(stream->mode,"w") == 0)
@@ -66,15 +69,22 @@ void myfputc(int b, MyFILE * stream)
     stream->pos++;
 
     }
-    writeblock(&stream->buffer.data, stream->blockno);
+
+    writeblock(&stream->buffer, stream->blockno);
+    printf("> myfputc stop\n");
+
 }
+
 
 int myfgetc(MyFILE * stream)
 {
-    int f_loc = file_in_directory(virtualDisk[rootDirIndex].dir,stream->name);
+    int f_loc = file_in_directory(virtualDisk[stream->dir_start].dir,stream->name);
 
-    int f_length = virtualDisk[rootDirIndex].dir.entrylist[f_loc].filelength;
-    fatentry_t bln= stream->blockno - virtualDisk[rootDirIndex].dir.entrylist[f_loc].firstblock;
+    int f_length = virtualDisk[stream->dir_start].dir.entrylist[f_loc].filelength;
+
+
+    fatentry_t bln= f_length/BLOCKSIZE;                                             ///number of blocks
+
     int c_to_return;
 
     if(stream->pos == BLOCKSIZE)
@@ -83,14 +93,15 @@ int myfgetc(MyFILE * stream)
         stream->pos = 0;
     }
 
-    if(stream->pos + (bln*BLOCKSIZE) < f_length)
+    if(stream->pos + (bln*BLOCKSIZE) <= f_length)
         {
-            c_to_return =virtualDisk[stream->blockno].data[stream->pos];
+            c_to_return =virtualDisk[stream->blockno].data[stream->pos-1];
+
             stream->pos++;
             if(c_to_return == 255)
                 return -1;
+            return c_to_return;
         }
-return c_to_return;
 }
 
 void myfclose(MyFILE * stream)
@@ -125,7 +136,7 @@ void myfclose(MyFILE * stream)
             }
         }
 
-    writeblock(&stream->buffer.data,stream->blockno); ///ASSUME ENOUGH SPACE EXISTS
+    writeblock(&stream->buffer,stream->blockno); ///ASSUME ENOUGH SPACE EXISTS
     free(stream);
 }
 
@@ -174,7 +185,8 @@ dirblock_t file_location(const char * path)
 
 MyFILE * myfopen( const char * filename, const char * mode )
 {
-    MyFILE * file;
+    printf("> myfopen start\n");
+	MyFILE * file;
     file = malloc( sizeof(MyFILE) ) ;
     int fblocks = (MAXBLOCKS / FATENTRYCOUNT );
 
@@ -189,10 +201,10 @@ MyFILE * myfopen( const char * filename, const char * mode )
         currentDirIndex++;
 
         direntry_t entry_for_file;
-        entry_for_file.filelength = 1;      ///EOF at the end
+        entry_for_file.filelength = 0;      ///EOF at the end
         entry_for_file.isdir = 0;
 
-
+        char * name_from_path;
         int pos_last_slash;
 
         for(int i = 0;i<strlen(filename); i++){
@@ -209,10 +221,14 @@ MyFILE * myfopen( const char * filename, const char * mode )
 
         writedirentry.dir = file_location(filename) ;           ///file name becomes path
 
+        if(writedirentry.dir.nextEntry == 3)
+            writedirentry.dir = expandDirectory(writedirentry.dir);
+
+
         writedirentry.dir.entrylist[writedirentry.dir.nextEntry] = entry_for_file;
         writedirentry.dir.nextEntry++;
-
-        writeblock(&writedirentry, currentDirIndex);
+        printf("currentDIrIndex %d",currentDirIndex);
+        writeblock(&writedirentry, writedirentry.dir.start);
 
         ///TO DO : implement append
 
@@ -220,8 +236,10 @@ MyFILE * myfopen( const char * filename, const char * mode )
         file->pos = 0;
         file->blockno = place_in_fat;
         strcpy(file->name,filename+pos_last_slash);
+        file->dir_start = currentDirIndex;
 
-        number_dir_entries++;
+
+
     }
     else if (f_loc != -1 && strcmp(mode,"r") == 0 ){
 
@@ -229,8 +247,10 @@ MyFILE * myfopen( const char * filename, const char * mode )
         file->pos = 0;
         file->blockno = virtualDisk[rootDirIndex].dir.entrylist[f_loc].firstblock;
         strcpy(file->name,filename);
-        return file;
+    	printf("> myfopen stop\n");
+		return file;
     }
+	printf("> myfopen stop\n");
     return(file);
 }
 
@@ -306,10 +326,12 @@ void writeblock ( diskblock_t * block, int block_address )
 
 void format ( )
 {
+    printf("> format start\n");
    diskblock_t block ;
    direntry_t  rootDir ;                // Create a root directory
-
-   int    fatblocksneeded =  (MAXBLOCKS / FATENTRYCOUNT ) ;
+   int         pos             = 0 ;
+   int         fatentry        = 0 ;
+   int         fatblocksneeded =  (MAXBLOCKS / FATENTRYCOUNT ) ;
    /* prepare block 0 : fill it with '\0',
     * use strcpy() to copy some text to it for test purposes
 	* write block 0 to virtual disk
@@ -341,28 +363,39 @@ void format ( )
 
     rootDir.isdir = 1;
     strcpy(rootDir.name,"/");
-    rootDir.firstblock = FAT[3];
     rootDirIndex = 3;
-
+    currentDir = &rootDir;
 
     block.dir.isdir = 1;
-    block.dir.nextEntry = 0;
+    direntry_t to_itself;               ///I know to parent exists in the real filesystem but useless implementation in this case
+    to_itself.firstblock = rootDirIndex;
+    strcpy(to_itself.name,rootDir.name);
+    to_itself.isdir = 1;
+    to_itself.unused = 1;
+    to_itself.modtime = time(0);
+
+    block.dir.entrylist[0] = to_itself;
+    block.dir.nextEntry = 1;
 
     writeblock(&block,3);
     FAT[3] = ENDOFCHAIN;
-    currentDir = &virtualDisk[3].dir;
     copyFAT();
     rootDirIndex = 3;
 
+	printf("> format stop\n");
 }
 
 char ** mylistdir(char * path)
 {
     /// assume absolute
+	printf("> mylistdir start\n");
+
     diskblock_t block_directory;
 
     currentDirIndex = rootDirIndex;
     block_directory.dir = virtualDisk[currentDirIndex].dir;
+    //for(int i = 0; i< DIRENTRYCOUNT;i++)
+    //    printf("check the entries in the current directory %s\n",block_directory.dir.entrylist[i].name);
 
 
     char path_tokenize[strlen(path)];
@@ -383,25 +416,67 @@ char ** mylistdir(char * path)
 
     }
 
-    char ** ptr_ptr_file_list = (char * ) malloc(sizeof(char) * DIRENTRYCOUNT);
 
-         for(int i = 0; i< DIRENTRYCOUNT;i++)
+    char ** ptr_ptr_file_list = (char * ) malloc(sizeof(char*) * 10);
+    for(int i = 0;i<10;i++) ptr_ptr_file_list[i]=NULL;
+
+    char array_found_elements[10][100];
+    int lst_counter=0;
+    int check_dir;
+    check_dir = block_directory.dir.start;
+    printf("Check dir is: %d",check_dir);
+
+    block_directory.dir = virtualDisk[check_dir].dir;
+
+    while(check_dir!=0)
     {
-        if(strlen(block_directory.dir.entrylist[i].name) > 0)
+    for(int i = 0; i< DIRENTRYCOUNT;i++)
+    {
+        if(strlen(block_directory.dir.entrylist[i].name) > 0  )
             {
-            ptr_ptr_file_list[i] = &block_directory.dir.entrylist[i].name;
+            strcpy(array_found_elements[lst_counter],block_directory.dir.entrylist[i].name);
+            ptr_ptr_file_list[lst_counter] = &array_found_elements[lst_counter];
+            lst_counter++;
+            printf("entry : %d = %s\n",i,ptr_ptr_file_list[i]);
             }
-
-
     }
-    return ptr_ptr_file_list;
+    check_dir = FAT[check_dir];
+    block_directory.dir = virtualDisk[check_dir ].dir;
+    }
+    printf("> mylistdir stop\n");
+
+	return ptr_ptr_file_list;
 
 }
+
+dirblock_t expandDirectory(dirblock_t dir_to_epxand)
+{
+    diskblock_t expansion_dir;
+    fatentry_t unused_sector;
+    unused_sector = retUnusedSector();
+
+    FAT[dir_to_epxand.start] = unused_sector;
+    FAT[unused_sector]=ENDOFCHAIN;
+    copyFAT();
+
+    for(int i=0;i<BLOCKSIZE;i++) expansion_dir.data[i]='\0';
+    expansion_dir.dir.isdir = 1;
+    expansion_dir.dir.start = unused_sector;
+    expansion_dir.dir.nextEntry = 0;
+    return expansion_dir.dir;
+}
+
+
 
 
 void mymkdir(char * path)
 {
+	printf("> mymkdir start \n");
+
     direntry_t entry_directory;
+
+    direntry_t to_itself;               ///I have the dirblock.start so this is kinda useless
+    direntry_t to_parent;
     diskblock_t block_directory;
     short int unusedSector;
 
@@ -416,27 +491,63 @@ void mymkdir(char * path)
     char* rest = path_tokenize;
 
     while ((path_dir = strtok_r(rest, "/", &rest))){
-
         unusedSector = retUnusedSector();
 
         FAT[unusedSector]=ENDOFCHAIN;
         copyFAT();
 
+
+        //update current directory to contain the new entry
         entry_directory.firstblock = unusedSector;
 
         strcpy(entry_directory.name,path_dir);
+
         entry_directory.modtime = time(0);
         entry_directory.isdir = 1;
         entry_directory.unused = 1;
 
-        block_directory.dir.isdir=1;
+
+        if(block_directory.dir.nextEntry == 3)
+            block_directory.dir  = expandDirectory(block_directory.dir);
+
         block_directory.dir.entrylist[block_directory.dir.nextEntry] = entry_directory;
+
         block_directory.dir.nextEntry++;
+        block_directory.dir.start = currentDirIndex;
+
         writeblock(&block_directory,currentDirIndex);
 
+        ///format the space for the next directory should also add the . and .. here
+        to_parent.firstblock = currentDirIndex;
         currentDirIndex = unusedSector;
+
+        to_itself.firstblock = unusedSector;
+        strcpy(to_parent.name,"..");
+        strcpy(to_itself.name,".");
+
+        to_itself.isdir=1;
+        to_parent.isdir=1;
+        to_itself.unused=1;
+        to_parent.unused=1;
+        to_itself.modtime=time(0);
+
         block_directory.dir = virtualDisk[currentDirIndex].dir;
+
+        block_directory.dir.start = currentDirIndex;
+        block_directory.dir.isdir = 1;
+        block_directory.dir.nextEntry=0;
+
+        block_directory.dir.entrylist[0] = to_itself;
+        block_directory.dir.nextEntry++;
+        block_directory.dir.entrylist[1] = to_parent;
+        block_directory.dir.nextEntry++;
+
+
+        printf("block_directory in entrylist[0] %s\n",block_directory.dir.entrylist[0].name);
+        writeblock(&block_directory,currentDirIndex);
+
     }
+	printf("> mymkdir stop\n");
 }
 
 
@@ -448,4 +559,3 @@ void printBlock ( int blockIndex )
 {
    printf ( "virtualdisk[%d] = %s\n", blockIndex, virtualDisk[blockIndex].data ) ;
 }
-
