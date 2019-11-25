@@ -196,7 +196,144 @@ dirblock_t file_location(const char * path)
 
 }
 
+void myremdir(char * dirname)
+{
+    diskblock_t navigating_directory;
 
+    ///this has to go to the parrent assume user does not try to delete root
+    if(dirname[0]=='/')
+        {
+            navigating_directory = virtualDisk[rootDirIndex];
+        }
+    else
+        navigating_directory = virtualDisk[realDirblockno ] ;    ///go to parent so that we get the entry from the previous directory
+
+    int pos_last_slash=0;
+    for(int i = 0;i<strlen(dirname); i++){
+        if(dirname[i] == '/')  pos_last_slash = i+1;
+    }
+
+
+    char path_tokenize[strlen(dirname)];
+    strcpy(path_tokenize,dirname);
+
+    char* path_dir;
+    char* rest = path_tokenize;
+
+     while ((path_dir = strtok_r(rest, "/", &rest))){
+
+        for(int i = 0 ;i <=DIRENTRYCOUNT;i++)
+        {
+            if(strcmp(path_dir, navigating_directory.dir.entrylist[i].name)==0) break;
+
+            if(strcmp(navigating_directory.dir.entrylist[i].name, path_dir )==0 && navigating_directory.dir.entrylist[i].isdir == 1 )         ///it should stop before returning the file
+            {
+
+                navigating_directory.dir = virtualDisk[navigating_directory.dir.entrylist[i].firstblock].dir;
+                break;
+            }
+
+        }
+
+    }
+
+    for(int i=0;i<DIRENTRYCOUNT;i++)
+    {   //printf("I am inside");
+        if(strcmp(dirname+pos_last_slash, navigating_directory.dir.entrylist[i].name)==0)
+        {
+            FAT[navigating_directory.dir.entrylist[i].firstblock] = UNUSED;
+            copyFAT();
+            for(int j = 0;j<BLOCKSIZE;j++) virtualDisk[navigating_directory.dir.entrylist[i].firstblock].data[j]='\0';
+
+            for(int j=i;j < navigating_directory.dir.nextEntry;j++) navigating_directory.dir.entrylist[j] =navigating_directory.dir.entrylist[j+1];
+            navigating_directory.dir.nextEntry--;
+
+            writeblock(&navigating_directory.data, navigating_directory.dir.start);
+
+        }
+    }
+}
+
+void myremove(char * pathfile)
+{
+    printf("> myremove start\n");
+    diskblock_t navigating_dir;
+    int pos_last_slash=0;
+    int fat_chain_to_unused[30];
+    int fat_chain_counter = 0;
+    int fat_checker;
+    ///get current directory
+    if(pathfile[0]== '/')
+        navigating_dir = virtualDisk[rootDirIndex];
+    else
+        navigating_dir = virtualDisk[realDirblockno];
+
+    /// look for the entry of the file you want to delete
+    ///we know that the file will not be
+
+    char path_tokenize[strlen(pathfile)];
+    strcpy(path_tokenize,pathfile);
+
+    char* path_dir;
+    char* rest = path_tokenize;
+
+     while ((path_dir = strtok_r(rest, "/", &rest))){
+        for(int i = 0 ;i <=DIRENTRYCOUNT;i++)
+        {
+            if(strcmp(navigating_dir.dir.entrylist[i].name, path_dir )==0 && navigating_dir.dir.entrylist[i].isdir == 1 )         ///it should stop before returning the file
+            {
+                navigating_dir.dir = virtualDisk[navigating_dir.dir.entrylist[i].firstblock].dir;
+
+                break;
+            }
+        }
+
+    }
+
+    for(int i = 0;i<strlen(pathfile); i++){
+        if(pathfile[i] == '/')  pos_last_slash = i+1;
+    }
+
+    ///Add expansion for
+    for(int i = 0 ;i <=DIRENTRYCOUNT;i++)
+       {
+            if(strcmp(pathfile + pos_last_slash, navigating_dir.dir.entrylist[i].name) == 0)
+                {
+                 ///start by clearing the memory not necessary but good to see it in the hexdump
+
+                for(int j = 0;j<BLOCKSIZE;j++) virtualDisk[navigating_dir.dir.entrylist[i].firstblock].data[j]='\0';
+
+                    ///set file FAT to UNUSED
+
+                    fat_checker = navigating_dir.dir.entrylist[i].firstblock;
+                    while( fat_checker != ENDOFCHAIN)
+                    {
+                        fat_chain_to_unused[fat_chain_counter]=fat_checker;
+                        fat_chain_counter++;
+                        fat_checker=FAT[fat_checker];
+                    }
+
+                    for(int j=0;j<fat_chain_counter;j++)
+                    {
+                        printf("fat_checker: %d",fat_chain_to_unused[j]);
+
+                        FAT[ fat_chain_to_unused[j] ]=UNUSED;
+
+                    }
+                    copyFAT();
+
+                    /// start colapsing the entries could implement colapsing for expanded directories too but too much work and no points extra
+
+                    for(int j=i;j < navigating_dir.dir.nextEntry;j++) navigating_dir.dir.entrylist[j] =navigating_dir.dir.entrylist[j+1];
+                    navigating_dir.dir.nextEntry--;
+                    writeblock(&navigating_dir.dir,navigating_dir.dir.start);
+
+
+
+                }
+       }
+    printf("> myremove stop\n");
+}
 
 MyFILE * myfopen( const char * filename, const char * mode )
 {
@@ -244,7 +381,7 @@ MyFILE * myfopen( const char * filename, const char * mode )
         for(int i=0;i<BLOCKSIZE;i++) writedirentry.data[i]='\0';
         writedirentry.dir = file_location(filename) ;
 
-        if(writedirentry.dir.nextEntry == 3)
+        if(writedirentry.dir.nextEntry == DIRENTRYCOUNT)
             if(FAT[writedirentry.dir.start] != ENDOFCHAIN)
                 writedirentry.dir = virtualDisk[FAT[writedirentry.dir.start]].dir;
             else
@@ -426,7 +563,7 @@ void format ( )
 
     block.dir.entrylist[0] = to_itself;
     block.dir.nextEntry = 1;
-
+    block.dir.start = rootDirIndex;
     writeblock(&block,3);
     FAT[3] = ENDOFCHAIN;
     copyFAT();
@@ -470,10 +607,10 @@ char ** mylistdir(char * path)
     }
 
 
-    char ** ptr_ptr_file_list = (char * ) malloc(sizeof(char*) * 10);
-    for(int i = 0;i<10;i++) ptr_ptr_file_list[i]=NULL;
+    char ** ptr_ptr_file_list ;
+    ptr_ptr_file_list = malloc(sizeof(char*)*10) ;
+    for(int i = 0;i<10;i++) ptr_ptr_file_list[i]=  malloc(256*sizeof(char));
 
-    char array_found_elements[10][100];
     int lst_counter=0;
     int check_dir;
     check_dir = block_directory.dir.start;
@@ -487,8 +624,7 @@ char ** mylistdir(char * path)
     {
         if(strlen(block_directory.dir.entrylist[i].name) > 0  )
             {
-            strcpy(array_found_elements[lst_counter],block_directory.dir.entrylist[i].name);
-            ptr_ptr_file_list[lst_counter] = &array_found_elements[lst_counter];
+            strcpy(ptr_ptr_file_list[lst_counter], block_directory.dir.entrylist[i].name);
             lst_counter++;
 
             }
@@ -529,9 +665,12 @@ void mymkdir(char * path)
     direntry_t to_itself;               ///I have the dirblock.start so this is kinda useless
     direntry_t to_parent;
     diskblock_t block_directory;
-    for(int i=0;i<BLOCKSIZE;i++) block_directory.data[i]='\0';
-    short int unusedSector;
+    diskblock_t new_block;
 
+    for(int i=0;i<BLOCKSIZE;i++) block_directory.data[i]='\0';
+    for(int i=0;i<BLOCKSIZE;i++) new_block.data[i]='\0';
+
+    short int unusedSector;
 
     char path_tokenize[strlen(path)];
     strcpy(path_tokenize,path);
@@ -543,13 +682,11 @@ void mymkdir(char * path)
         currentDirIndex = realDirblockno;
     for(int i=0;i<BLOCKSIZE;i++) block_directory.data[i]='\0';
     block_directory.dir = virtualDisk[currentDirIndex].dir;
-
     char* path_dir;
     char* rest = path_tokenize;
 
     while ((path_dir = strtok_r(rest, "/", &rest))){
         unusedSector = retUnusedSector();
-
         FAT[unusedSector]=ENDOFCHAIN;
         copyFAT();
 
@@ -563,22 +700,25 @@ void mymkdir(char * path)
         entry_directory.isdir = 1;
         entry_directory.unused = 1;
 
-
-        if(block_directory.dir.nextEntry == 3)
-            block_directory.dir  = expandDirectory(block_directory.dir);
+         if(block_directory.dir.nextEntry == DIRENTRYCOUNT)
+            if(FAT[block_directory.dir.start] != ENDOFCHAIN)
+                block_directory = virtualDisk[FAT[block_directory.dir.start]];
+            else
+                block_directory.dir = expandDirectory(block_directory.dir);
 
         block_directory.dir.entrylist[block_directory.dir.nextEntry] = entry_directory;
 
         block_directory.dir.nextEntry++;
         block_directory.dir.start = currentDirIndex;
-
-        writeblock(&block_directory,currentDirIndex);
+        writeblock(&block_directory.dir,currentDirIndex);
 
         ///format the space for the next directory should also add the . and .. here
         to_parent.firstblock = currentDirIndex;
         currentDirIndex = unusedSector;
 
         to_itself.firstblock = unusedSector;
+        for(int i=0;i<MAXNAME;i++) to_parent.name[0]='\0';
+        for(int i=0;i<MAXNAME;i++) to_itself.name[0]='\0';
         strcpy(to_parent.name,"..");
         strcpy(to_itself.name,".");
 
@@ -587,7 +727,7 @@ void mymkdir(char * path)
         to_itself.unused=1;
         to_parent.unused=1;
         to_itself.modtime=time(0);
-        for(int i=0;i<BLOCKSIZE;i++) block_directory.data[i]='\0';
+
         block_directory.dir = virtualDisk[currentDirIndex].dir;
 
         block_directory.dir.start = currentDirIndex;
@@ -599,7 +739,7 @@ void mymkdir(char * path)
         block_directory.dir.entrylist[1] = to_parent;
         block_directory.dir.nextEntry++;
 
-        writeblock(&block_directory,currentDirIndex);
+        writeblock(&block_directory.dir,currentDirIndex);
 
     }
 	printf("> mymkdir stop\n");

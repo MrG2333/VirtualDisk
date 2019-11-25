@@ -21,17 +21,13 @@ int main()
     myfputc('6',file1);
     myfclose(file1);
 
-    list = mylistdir("/firstdir/seconddir");
-    printf("\n\n My listdir list: ");
-    for(int i=0;list[i]!=NULL;i++) printf("%s ",list[i]);
-    printf("\n\n");
+    //list = mylistdir("/firstdir/seconddir");
+    //printf("\n\n My listdir list: ");
+    //for(int i=0;list[i]!=NULL;i++) printf("%s ",list[i]);
+    //printf("\n\n");
 
     mychdir("/firstdir/seconddir");
 
-    list = mylistdir(".");
-    printf("\n\n My listdir list: ");
-    for(int i=0;list[i]!=NULL;i++) printf("%s ",list[i]);
-    printf("\n\n");
 
     file2 = myfopen("testfile2.txt","w");
     myfputc('W',file2);
@@ -42,7 +38,19 @@ int main()
     myfputc('R',file2);
     myfclose(file2);
 
+
+    list = mylistdir(".");
+    printf("\n\n My listdir list: ");
+    for(int i=0;list[i]!=NULL;i++) printf(" %s ",list[i]);
+    printf("\n\n");
+
     mymkdir("third");
+
+
+    list = mylistdir("/firstdir/seconddir");
+    printf("\n\n My listdir list: ");
+    for(int i=0;list[i]!=NULL;i++) printf(" %s ",list[i]);
+    printf("\n\n");
 
     file3 = myfopen("third/testfile3.txt","w");
     myfputc('A',file3);
@@ -53,5 +61,22 @@ int main()
 
     writedisk("virtualdiskA5_A1_a");
 
+    myremove("testfile1.txt");
+    myremove("testfile2.txt");
+
+    writedisk("virtualdiskA5_A1_b");
+
+    mychdir("third");
+    myremove("testfile3.txt");
+
+    writedisk("virtualdiskA5_A1_c");
+
+    mychdir("/firstdir/seconddir");
+    myremdir("third");
+    mychdir("/firstdir");
+    myremdir("seconddir");
+    mychdir("/");
+    myremdir("firstdir");
+    writedisk("virtualdiskA5_A1_d");
 return 0;
 }

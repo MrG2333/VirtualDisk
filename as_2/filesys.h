@@ -22,7 +22,7 @@
 #define FATENTRYCOUNT (BLOCKSIZE / sizeof(fatentry_t))
 
 #define DIRENTRYCOUNT ((BLOCKSIZE - (3*sizeof(int)) ) / sizeof(direntry_t))
-#define MAXNAME       256
+#define MAXNAME       128
 #define MAXPATHLENGTH 1024
 
 #define UNUSED        -1
@@ -117,6 +117,9 @@ void mymkdir( char *path) ;
 char ** mylistdir(char * path) ;
 dirblock_t expandDirectory(dirblock_t dir_to_expand) ;
 void mychdir(char * path) ;
+void myremove(char *pathfile);
+void myremdir(char *dirname);
+
 #endif
 
 /*
