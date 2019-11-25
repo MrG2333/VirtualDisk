@@ -21,11 +21,6 @@ int main()
     myfputc('6',file1);
     myfclose(file1);
 
-    //list = mylistdir("/firstdir/seconddir");
-    //printf("\n\n My listdir list: ");
-    //for(int i=0;list[i]!=NULL;i++) printf("%s ",list[i]);
-    //printf("\n\n");
-
     mychdir("/firstdir/seconddir");
 
 

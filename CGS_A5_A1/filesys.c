@@ -158,12 +158,12 @@ return -1;
 
 
 
-dirblock_t file_location(const char * path)
+dirblock_t file_location(const char * path, int filename_start)
 {
 
     diskblock_t search_block;
     int found = 0;
-
+    int aux;
     if(path[0] == '/')
         currentDirIndex = rootDirIndex;
     else
@@ -174,19 +174,35 @@ dirblock_t file_location(const char * path)
     char path_tokenize[strlen(path)];
     strcpy(path_tokenize,path);
 
+    int dirto_make_length  = (strlen(path) - (strlen(path) - filename_start )) ;
+
+    char dirs_to_make[dirto_make_length];
+
+    strncpy(dirs_to_make,path, dirto_make_length);
+    dirs_to_make[dirto_make_length-1]='\0';
+    printf("dirs to make :%s", dirs_to_make);
+
+
 
     char* path_dir;
     char* rest = path_tokenize;
 
     while ((path_dir = strtok_r(rest, "/", &rest))){
-
+            found=0;
         for(int i=0; i < DIRENTRYCOUNT;i++){
                 if(strcmp(search_block.dir.entrylist[i].name,path_dir) == 0 && search_block.dir.entrylist[i].isdir == 1){
+                    printf("\nin file location :%s \n",search_block.dir.entrylist[i].name);
                     found = 1;
                     currentDirIndex = search_block.dir.entrylist[i].firstblock;
                     search_block.dir = virtualDisk[currentDirIndex].dir;
                 }
             }
+        if(found == 0 && strchr(path,'/')== NULL&& strcmp(path_dir,path+filename_start)!=0 )
+        {
+            printf("\n\n\n\n\nDo i get here?");
+            mymkdir(dirs_to_make);
+            char* rest = path_tokenize;
+        }
     }
 
 
@@ -371,6 +387,8 @@ MyFILE * myfopen( const char * filename, const char * mode )
             if(filename[i] == '/')  pos_last_slash = i+1;
         }
 
+
+
         strcpy(entry_for_file.name,filename+pos_last_slash);
         entry_for_file.unused = 1;
         entry_for_file.firstblock = place_in_fat;
@@ -379,7 +397,7 @@ MyFILE * myfopen( const char * filename, const char * mode )
 
         diskblock_t writedirentry;
         for(int i=0;i<BLOCKSIZE;i++) writedirentry.data[i]='\0';
-        writedirentry.dir = file_location(filename) ;
+        writedirentry.dir = file_location(filename,pos_last_slash) ;
 
         if(writedirentry.dir.nextEntry == DIRENTRYCOUNT)
             if(FAT[writedirentry.dir.start] != ENDOFCHAIN)
