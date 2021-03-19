@@ -17,106 +17,101 @@
 #define FALSE 0
 #endif
 
-#define MAXBLOCKS     1024
-#define BLOCKSIZE     1024
+#define MAXBLOCKS 1024
+#define BLOCKSIZE 1024
 #define FATENTRYCOUNT (BLOCKSIZE / sizeof(fatentry_t))
 
-#define DIRENTRYCOUNT ((BLOCKSIZE - (3*sizeof(int)) ) / sizeof(direntry_t))
-#define MAXNAME       128
+#define DIRENTRYCOUNT ((BLOCKSIZE - (3 * sizeof(int))) / sizeof(direntry_t))
+#define MAXNAME 128
 #define MAXPATHLENGTH 1024
 
-#define UNUSED        -1
-#define ENDOFCHAIN     0
-#define EOF           -1
+#define UNUSED -1
+#define ENDOFCHAIN 0
+#define EOF -1
 
-
-typedef unsigned char Byte ;
+typedef unsigned char Byte;
 
 /* create a type fatentry_t, we set this currently to short (16-bit)
  */
-typedef short fatentry_t ;
-
+typedef short fatentry_t;
 
 // a FAT block is a list of 16-bit entries that form a chain of disk addresses
 
 //const int   fatentrycount = (blocksize / sizeof(fatentry_t)) ;
 
-typedef fatentry_t fatblock_t [ FATENTRYCOUNT ] ;
-
+typedef fatentry_t fatblock_t[FATENTRYCOUNT];
 
 /* create a type direntry_t
  */
 
-typedef struct direntry {
-   int         entrylength ;   // records length of this entry (can be used with names of variables length)
-   Byte        isdir ;          // 0 for false
-   Byte        unused ;         //1 for used
-   time_t      modtime ;
-   int         filelength ;
-   fatentry_t  firstblock ;
-   char   name [MAXNAME] ;
-} direntry_t ;
+typedef struct direntry
+{
+   int entrylength; // records length of this entry (can be used with names of variables length)
+   Byte isdir;      // 0 for false
+   Byte unused;     //1 for used
+   time_t modtime;
+   int filelength;
+   fatentry_t firstblock;
+   char name[MAXNAME];
+} direntry_t;
 
 // a directory block is an array of directory entries
 
 //const int   direntrycount = (blocksize - (3*sizeof(int)) ) / sizeof(direntry_t) ;
 
-typedef struct dirblock {
-   int isdir ;
-   int nextEntry ;
-   int start ;
-   direntry_t entrylist [ DIRENTRYCOUNT ] ; // the first two integer are marker and endpos
-} dirblock_t ;
-
-
+typedef struct dirblock
+{
+   int isdir;
+   int nextEntry;
+   int start;
+   direntry_t entrylist[DIRENTRYCOUNT]; // the first two integer are marker and endpos
+} dirblock_t;
 
 // a data block holds the actual data of a filelength, it is an array of 8-bit (byte) elements
 
-typedef Byte datablock_t [ BLOCKSIZE ] ;
-
+typedef Byte datablock_t[BLOCKSIZE];
 
 // a diskblock can be either a directory block, a FAT block or actual data
 
-typedef union block {
-   datablock_t data ;
-   dirblock_t  dir  ;
-   fatblock_t  fat  ;
-} diskblock_t ;
+typedef union block
+{
+   datablock_t data;
+   dirblock_t dir;
+   fatblock_t fat;
+} diskblock_t;
 
 // finally, this is the disk: a list of diskblocks
 // the disk is declared as extern, as it is shared in the program
 // it has to be defined in the main program filelength
 
-extern diskblock_t virtualDisk [ MAXBLOCKS ] ;
-
+extern diskblock_t virtualDisk[MAXBLOCKS];
 
 // when a file is opened on this disk, a file handle has to be
 // created in the opening program
 
-typedef struct filedescriptor {
-   char        mode[3] ;
-   fatentry_t  blockno ;           // block no
-   fatentry_t  dir_start;
-   int         pos     ;           // byte within a block
-   char   name [MAXNAME] ;
-   diskblock_t buffer  ;
-} MyFILE ;
+typedef struct filedescriptor
+{
+   char mode[3];
+   fatentry_t blockno; // block no
+   fatentry_t dir_start;
+   int pos; // byte within a block
+   char name[MAXNAME];
+   diskblock_t buffer;
+} MyFILE;
 
-
-
-void format() ;
-void writedisk ( const char * filename ) ;
-MyFILE * myfopen(  const char * filename, const char * mode) ;
-void myfputc(int b, MyFILE * stream) ;
-void myfclose(MyFILE * stream) ;
-int myfgetc(MyFILE * stream) ;
-int retUnusedSector() ;
-dirblock_t file_location(const char * filename, int filename_start) ;
-int file_in_directory(dirblock_t,const char * filename) ;
-void mymkdir( char *path) ;
-char ** mylistdir(char * path) ;
-dirblock_t expandDirectory(dirblock_t dir_to_expand) ;
-void mychdir(char * path) ;
+void format();
+void writedisk(const char *filename);
+MyFILE *myfopen(const char *filename, const char *mode);
+void myfputc(int b, MyFILE *stream);
+void myfclose(MyFILE *stream);
+int myfgetc(MyFILE *stream);
+int retUnusedSector();
+dirblock_t file_location(const char *filename, int filename_start);
+int file_in_directory(dirblock_t, const char *filename);
+void mymkdir(char *path);
+char **mylistdir(char *path);
+dirblock_t expandDirectory(dirblock_t dir_to_expand);
+void mychdir(char *path);
 void myremove(char *pathfile);
 void myremdir(char *dirname);
 
